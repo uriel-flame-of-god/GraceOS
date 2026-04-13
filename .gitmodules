@@ -1,0 +1,3 @@
+[submodule "ports"]
+	path = ports
+	url = https://github.com/uriel-flame-of-god/GraceOS-PORTS.git
