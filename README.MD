@@ -59,7 +59,7 @@ This builds the kernel, creates a bootable ISO, and launches QEMU.
 | `fetch <ip> [path] [outfile]` | HTTP GET, optionally save response body to BranchFS |
 | `quill <file>` | Text editor |
 | `chivm` / `chivm build` / `run` | ChibiVM REPL, compiler, and program launcher |
-| `7c encode|decode` | ZIP store-only tool (encode/decode to BranchFS) |
+| `7c encode` / `7c decode` | ZIP store-only tool (encode/decode to BranchFS) |
 | `snake` | Play Snake game |
 | `spm ...` | Security Policy Manager user/permission commands |
 | `shutdown`, `reboot`, `halt` | Power controls |
