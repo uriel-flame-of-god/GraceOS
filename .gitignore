@@ -1,0 +1,76 @@
+# GraceOS Build Artifacts
+build/
+*.o
+*.elf
+*.iso
+graceos.iso
+
+# Tools directory (too large for git - must be downloaded separately)
+tools/
+
+# ISO staging directory contents (keep structure, ignore generated files)
+iso/boot/kernel.elf
+
+# Editor and IDE files
+.vscode/
+.vs/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS-specific files
+Thumbs.db
+desktop.ini
+
+# Logs and debug files
+*.log
+*.stackdump
+
+# Temporary files
+*.tmp
+*.bak
+*.old
+
+# C/Assembly specific
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Core dumps (only in root, not kernel/core/)
+/core
+/core.*
+
+# GDB history
+.gdb_history
+
+# QEMU related
+qemu.log
+serial.log
+
+# Backup files
+*~
+\#*\#
+.\#*
+
+disasm.txt
+
+#directory too large to track
+tools/
+
+CLAUDE.MD
+CLAUDE*.MD
+*CLAUDE*.MD
+*CLAUDE.MD
+
+.claude/
+
+bsd
+
+disk.img
+
+packets.pcap
+*.pcap

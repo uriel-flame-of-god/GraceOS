@@ -1,0 +1,3 @@
+name = US Eastern
+offset = -05:00
+format = MM-DD-YYYY hh:mm:ss A
