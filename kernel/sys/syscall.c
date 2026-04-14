@@ -963,5 +963,14 @@ void syscall_init(void)
     syscall_table[SYS_SPM_USER_PASSWD] = sys_spm_user_passwd;
     syscall_table[SYS_SPM_AUTH]        = sys_spm_auth;
 
+    // Audio syscalls (VoiceBoxSystem)
+    audio_syscalls_init();
+    syscall_table[SYS_AUDIO_OPEN]  = sys_audio_open;
+    syscall_table[SYS_AUDIO_WRITE] = sys_audio_write;
+    syscall_table[SYS_AUDIO_START] = sys_audio_start;
+    syscall_table[SYS_AUDIO_STOP]  = sys_audio_stop;
+    syscall_table[SYS_AUDIO_CLOSE] = sys_audio_close;
+    syscall_table[SYS_AUDIO_CTL]   = sys_audio_ctl;
+
     sys_log("Syscall table ready");
 }

@@ -227,8 +227,8 @@ void isr_handler(struct interrupt_frame* frame)
         tty_print("\n\n*** PAGE FAULT ***\n");
         tty_set_color(TTY_LIGHT_GREY, TTY_BLACK);
         
-        tty_print("Address: 0x");
-        // Print fault address (simplified)
+        tty_print("Address: ");
+        tty_print_hex(fault_addr);
         tty_print("\nError: ");
         
         if (!(frame->error_code & 0x1))

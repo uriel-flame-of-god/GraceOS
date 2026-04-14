@@ -230,7 +230,7 @@ The following must NOT use kmalloc:
 | ---------------------- | ----------------- |
 | Framebuffer backbuffer | PMM               |
 | Video buffers          | PMM               |
-| Audio buffers          | PMM               |
+| Audio buffers          | Backend-specific (SB16/AC97 DMA + VoiceBox ring/bounce) |
 | DMA buffers            | PMM               |
 | Disk cache             | PMM               |
 | Page cache             | PMM               |

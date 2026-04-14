@@ -21,11 +21,28 @@ SECTIONS
         *(.text*)
     }
 
+      /* Dedicated low-memory SB16 DMA page(s). */
+      .sb16dma ALIGN(4K) : {
+            KEEP(*(.sb16dma))
+      }
+
     .font ALIGN(4K): {
       _font_start=.;
       KEEP(*(.font))
       _font_end=.;
     }: rodata
+
+    /* ----------------------------
+       Embedded Audio Samples (VoiceBoxSystem)
+       Produced by Makefile via llvm-objcopy -I binary.
+       The section is renamed to .sample_mp3 before linking.
+       _sample_mp3_start / _sample_mp3_end used by voicebox.h.
+       ---------------------------- */
+    .samples ALIGN(4K) : {
+        _sample_mp3_start = .;
+        KEEP(*(.sample_mp3))
+        _sample_mp3_end = .;
+    }
 
     /* ----------------------------
        Read-only data

@@ -231,6 +231,19 @@ process_t* sched_pick(void)
             best = p;
             best_score = score;
         }
+        else if (score == best_score && best != NULL)
+        {
+            /* Tie-breaker: prefer the process that waited longer. */
+            if (p->wait_time > best->wait_time)
+            {
+                best = p;
+            }
+            /* If wait times are equal, avoid sticking to current forever. */
+            else if (p->wait_time == best->wait_time && best == current && p != current)
+            {
+                best = p;
+            }
+        }
     }
     
     unlock_sched();
@@ -284,6 +297,11 @@ void schedule(void)
         {
             ctx_switch(&prev->ctx, &next->ctx);
         }
+    }
+    else if (next)
+    {
+        /* Keep state coherent when the same process continues running. */
+        next->state = PROC_RUNNING;
     }
     
     sched_enable_preempt();

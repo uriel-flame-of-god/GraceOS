@@ -26,6 +26,7 @@ static int extended_key = 0;  /* E0 prefix detected */
 static volatile int kb_irq_seen = 0;
 static int kb_irq_logged = 0;
 static int kb_poll_logged = 0;
+static volatile int kb_ctrl_c_pending = 0;
 
 /* US QWERTY Keyboard Layout - Normal (lowercase) */
 static const char scancode_to_ascii[] = {
@@ -120,6 +121,7 @@ void keyboard_init(void)
     capslock_on = 0;
     extended_key = 0;
     kb_irq_seen = 0;
+    kb_ctrl_c_pending = 0;
 
     /* Basic PS/2 controller init: enable IRQ1 and keyboard scanning. */
     kb_flush_output();
@@ -311,6 +313,8 @@ static void keyboard_process_scancode(uint8_t scancode)
                     }
                     if (c != 0)
                     {
+                        if (c == 0x03)
+                            kb_ctrl_c_pending = 1;
                         kb_buffer_add(c);
                         return;
                     }
@@ -400,4 +404,24 @@ void keyboard_service_run(void)
             keyboard_poll_once();
         __asm__ volatile ("sti; hlt");
     }
+}
+
+int keyboard_ctrl_c_pending(void)
+{
+    return kb_ctrl_c_pending;
+}
+
+int keyboard_consume_ctrl_c(void)
+{
+    if (kb_ctrl_c_pending)
+    {
+        kb_ctrl_c_pending = 0;
+        return 1;
+    }
+    return 0;
+}
+
+void keyboard_clear_ctrl_c(void)
+{
+    kb_ctrl_c_pending = 0;
 }

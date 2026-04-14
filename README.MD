@@ -18,6 +18,7 @@ GraceOS (formerly Grace-Kernel) is a hobby operating system built from scratch f
 - **Graphics**: VBE Framebuffer with Raylib compatibility layer
 - **Service Orchestration**: minit service tree with restart policy for core services
 - **Input**: PS/2 keyboard driver with IRQ + polling service
+- **Audio**: VoiceBox playback with SB16 as default, AC97 as secondary backend, ISA fallback, and HDA experimental path
 - **Networking**: virtio-net PCI driver, Ethernet/ARP/IPv4/ICMP/TCP stack, HTTP/1.1 client
 - **LLM Runtime**: In-kernel GGUF inference engine — transformer forward pass, quantization, chat templates, LoRA
 - **Userland**: Interactive shell, Snake game, custom syscall interface (INT 0x80)
@@ -59,6 +60,9 @@ This builds the kernel, creates a bootable ISO, and launches QEMU.
 | `fetch <ip> [path] [outfile]` | HTTP GET, optionally save response body to BranchFS |
 | `quill <file>` | Text editor |
 | `chivm` / `chivm build` / `run` | ChibiVM REPL, compiler, and program launcher |
+| `mplayer <file>` | Play WAV/MP3 via VoiceBox |
+| `mplayer --sample` | Play embedded sample |
+| `mplayer --switch <sb16|ac97|hda|isa|auto>` | Select audio backend |
 | `7c encode` / `7c decode` | ZIP store-only tool (encode/decode to BranchFS) |
 | `snake` | Play Snake game |
 | `spm ...` | Security Policy Manager user/permission commands |
@@ -120,12 +124,14 @@ GraceOS/
       context.asm         Context switch (assembly)
       proc/sched/fork/    PCB, scheduler, fork, exec, wait, pipe, job
     spm/                  Security Policy Manager
+    audio/                VoiceBox core, server, audio clock
     sys/                  Syscall dispatcher + handlers
       sys_net.c           Networking syscalls (120-126)
       sys_proc.c          Process syscalls
       sys_time.c          Time syscalls
       sys_sysinfo.c       Sysinfo syscall
   drivers/                Device drivers
+    audio/                SB16, AC97, HDA, ISA speaker backends
     input/                PS/2 keyboard, mouse
     net/                  virtio-net PCI driver
     storage/              BranchFS, RTC, IDE, NVMe, PMEM
@@ -153,7 +159,7 @@ GraceOS/
   ports/                  BSD-style ports tree (third-party software)
   grub/                   GRUB2 config and themes
   iso/                    Bootable ISO staging area
-  docs/                   Documentation (17 files)
+  docs/                   Documentation (20 files)
 ```
 
 ## Ports
@@ -193,6 +199,7 @@ ChibiVM files are stored in BranchFS, so compiled CMDT artifacts can be listed, 
 ## Documentation
 
 - **[API.MD](docs/API.MD)** - System API and Syscall Reference
+- **[AUDIO.MD](docs/AUDIO.MD)** - Audio backend status and playback notes
 - **[CHIVM.MD](docs/CHIVM.MD)** - ChibiVM language, REPL, and CMDT workflow
 - **[CONTRIBUTORS.MD](docs/CONTRIBUTORS.MD)** - Project Credits
 - **[STATUS.MD](docs/STATUS.MD)** - Feature Matrix

@@ -17,6 +17,9 @@ void pmm_init(void* mb_info);
 /* Allocate a physical page (returns physical address) */
 uint64_t pmm_alloc_page(void);
 
+/* Allocate a page below 16MB (for ISA DMA constraints). */
+uint64_t pmm_alloc_page_low(void);
+
 /* Free a physical page */
 void pmm_free_page(uint64_t phys_addr);
 
