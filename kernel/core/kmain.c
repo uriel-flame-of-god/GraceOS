@@ -22,6 +22,9 @@
 #include "../../lib/libc/string.h"
 #include "../../drivers/storage/pmem.h"
 #include "../net/net.h"
+#include "../audio/voicebox.h"
+#include "../audio/audio_clock.h"
+#include "../audio/voicebox_server.h"
 
 /* Kernel end symbol from linker */
 extern char end;
@@ -33,6 +36,7 @@ extern char end;
 
 static void shell_entry(void)
 {
+    klog_logn("shell: started");
     shell_init();
     shell_run();
 }
@@ -241,6 +245,11 @@ void kmain(uint64_t multiboot_info)
     klog_init_msg("Initializing SASY segment allocator");
     sasy_init();
     klog_logn("SASY ready");
+
+    // Initialize VoiceBox Core (after SASY — uses ring buffer segments)
+    klog_init_msg("Initializing VoiceBox audio subsystem");
+    voicebox_init();
+    klog_logn("VoiceBox ready");
     
     // Initialize security subsystem (must precede proc)
     klog_init_msg("Initializing spm security subsystem");
@@ -271,6 +280,39 @@ void kmain(uint64_t multiboot_info)
     // Initialize network stack
     klog_init_msg("Initializing network stack");
     net_init();
+
+    // Register VoiceBox Server with minit
+    klog_init_msg("Registering VoiceBox server with minit");
+    minit_node_t* vb_node = minit_register("voicebox", minit_root);
+    if (vb_node)
+    {
+        vb_node->entry_fn     = voicebox_server_main;
+        vb_node->auto_restart = true;
+        vb_node->max_restarts = 3;
+        vb_node->base_priority = SCHED_DEFAULT_PRIORITY;
+
+        /* Direct-call mode server returns quickly; initialize it before shell spawn. */
+        voicebox_server_main();
+    }
+    else
+    {
+        klog_warn("minit: failed to register voicebox node");
+    }
+
+    // Register and spawn background audio clock service
+    klog_init_msg("Registering audio clock service with minit");
+    minit_node_t* clk_node = minit_register("audio_clock", minit_root);
+    if (clk_node)
+    {
+        clk_node->entry_fn = audio_clock_main;
+        clk_node->auto_restart = true;
+        clk_node->base_priority = SCHED_DEFAULT_PRIORITY;
+        minit_spawn(clk_node);
+    }
+    else
+    {
+        klog_warn("minit: failed to register audio_clock node");
+    }
 
     // Register and spawn the keyboard service through minit
     klog_init_msg("Registering keyboard service with minit");
@@ -303,6 +345,8 @@ void kmain(uint64_t multiboot_info)
     {
         klog_warn("minit: failed to register shell node");
     }
+
+    klog_logn("kmain: entering scheduler handoff");
 
     /* Enter scheduler/idle context; interrupts enable via idle rflags. */
     __asm__ volatile ("cli");

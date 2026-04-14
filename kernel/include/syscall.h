@@ -74,6 +74,14 @@ enum syscall_num {
    SYS_SPM_USER_PASSWD = 95,  // Set user password
    SYS_SPM_AUTH        = 96,  // Authenticate user
 
+    /* Audio Syscalls (VoiceBoxSystem) */
+    SYS_AUDIO_OPEN  = 130, // Open audio output stream (rate, channels, bits) → handle
+    SYS_AUDIO_WRITE = 131, // Write PCM from SASY segment → bytes written
+    SYS_AUDIO_START = 132, // Start playback
+    SYS_AUDIO_STOP  = 133, // Stop playback
+    SYS_AUDIO_CLOSE = 134, // Close stream
+    SYS_AUDIO_CTL   = 135, // Control (volume, mute, rate)
+
     /* Framebuffer Syscalls */
     SYS_FB_GETINFO = 60,  // Get framebuffer info (width, height, bpp)
     SYS_FB_MAP     = 61,  // Map framebuffer into process memory
@@ -185,5 +193,22 @@ long sys_spm_cap_enum(long index, long out_ptr, long unused1, long unused2, long
 long sys_spm_check(long uid, long perm, long target_ptr, long unused1, long unused2, long unused3);
 long sys_spm_user_passwd(long uid, long password_ptr, long unused1, long unused2, long unused3, long unused4);
 long sys_spm_auth(long uid, long password_ptr, long unused1, long unused2, long unused3, long unused4);
+
+/* Audio Syscall Implementations (VoiceBoxSystem) */
+long sys_audio_open(long sample_rate, long channels, long bits,
+                    long unused1, long unused2, long unused3);
+long sys_audio_write(long handle, long seg_handle, long byte_count,
+                     long unused1, long unused2, long unused3);
+long sys_audio_start(long handle, long unused1, long unused2,
+                     long unused3, long unused4, long unused5);
+long sys_audio_stop(long handle, long unused1, long unused2,
+                    long unused3, long unused4, long unused5);
+long sys_audio_close(long handle, long unused1, long unused2,
+                     long unused3, long unused4, long unused5);
+long sys_audio_ctl(long handle, long cmd, long value,
+                   long unused1, long unused2, long unused3);
+
+/* Audio syscall subsystem init */
+void audio_syscalls_init(void);
 
 #endif /* GRACEOS_SYSCALL_H */

@@ -50,11 +50,13 @@ OBJCOPY := llvm-objcopy
 GRUB_MKRESCUE := wsl grub2-mkrescue
 
 CC := $(CLANG) --target=x86_64-elf
-QEMU := qemu-system-x86_64
+QEMU ?= qemu-system-x86_64
 QEMU_LOG := qemu.log
 DISK_IMG := disk.img
 DISK_SIZE := 64M
-QEMU_NET := -netdev user,id=net0 -device virtio-net-pci,netdev=net0,mac=52:54:00:12:34:56
+QEMU_NET   := -netdev user,id=net0 -device virtio-net-pci,netdev=net0,mac=52:54:00:12:34:56
+QEMU_AUDIODEV ?= -audiodev dsound,id=snd0
+QEMU_AUDIO := $(QEMU_AUDIODEV) -machine pcspk-audiodev=snd0 -device intel-hda -device hda-duplex,audiodev=snd0
 
 
 # ============================
@@ -76,6 +78,10 @@ LDFLAGS := -nostdlib -z max-page-size=0x1000
 
 FONT_FILE := kernel/font/default.psf2
 FONT_OBJ  := build/kernel/font/default_font.o
+
+# Audio samples (embedded via llvm-objcopy, same technique as font)
+SAMPLE_MP3_SRC := kernel/samples/sample.mp3
+SAMPLE_MP3_OBJ := build/kernel/samples/sample_mp3.o
 
 
 # Boot
@@ -239,6 +245,21 @@ PMEM_OBJ     := build/drivers/storage/pmem.o
 SERIAL_OBJ   := build/drivers/video/serial.o
 MOUSE_OBJ := build/drivers/input/mouse.o
 
+# Audio driver (Intel HDA)
+HDA_OBJ := build/drivers/audio/hda.o
+ISA_SPK_OBJ := build/drivers/audio/isa_speaker.o
+SB16_OBJ := build/drivers/audio/sb16.o
+AC97_OBJ := build/drivers/audio/ac97.o
+
+# VoiceBox kernel audio subsystem
+VBOX_CORE_OBJ   := build/kernel/audio/voicebox.o
+VBOX_SERVER_OBJ := build/kernel/audio/voicebox_server.o
+AUDIO_CLOCK_OBJ := build/kernel/audio/audio_clock.o
+SYS_AUDIO_OBJ   := build/kernel/sys/sys_audio.o
+
+# mplayer CLI
+MPLAYER_OBJ := build/userland/mplayer/mplayer.o
+
 # Network driver
 VIRTIO_NET_OBJ := build/drivers/net/virtio_net.o
 
@@ -303,6 +324,16 @@ OBJ := \
 	$(SPM_OBJ) \
 	$(SYS_DISK_OBJ) \
 	$(SYS_SPM_OBJ) \
+	$(HDA_OBJ) \
+	$(ISA_SPK_OBJ) \
+	$(SB16_OBJ) \
+	$(AC97_OBJ) \
+	$(VBOX_CORE_OBJ) \
+	$(VBOX_SERVER_OBJ) \
+	$(AUDIO_CLOCK_OBJ) \
+	$(SYS_AUDIO_OBJ) \
+	$(MPLAYER_OBJ) \
+	$(SAMPLE_MP3_OBJ) \
 	$(CFDISK_OBJ) \
 	$(SHELL_OBJ) \
 	$(SHELL_SYSINFO_OBJ) \
@@ -412,6 +443,10 @@ dirs:
 	if not exist build\kernel\net\ip mkdir build\kernel\net\ip
 	if not exist build\kernel\net\tcp mkdir build\kernel\net\tcp
 	if not exist build\kernel\net\http mkdir build\kernel\net\http
+	if not exist build\kernel\audio mkdir build\kernel\audio
+	if not exist build\kernel\samples mkdir build\kernel\samples
+	if not exist build\drivers\audio mkdir build\drivers\audio
+	if not exist build\userland\mplayer mkdir build\userland\mplayer
 
 # Ensure all object outputs wait for directory creation in parallel builds.
 $(OBJ) $(BOOT_OBJ) $(FONT_OBJ): dirs
@@ -725,6 +760,65 @@ build/kernel/spm/spm.o: kernel/spm/spm.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ----------------------------
+# Audio Sample Embedding
+# Uses llvm-objcopy (same technique as font embedding)
+# Section renamed to .sample_mp3 for the linker script
+# ----------------------------
+
+build/kernel/samples/sample_mp3.o: $(SAMPLE_MP3_SRC)
+	if not exist build\kernel\samples mkdir build\kernel\samples
+	$(OBJCOPY) \
+	  -I binary \
+	  -O elf64-x86-64 \
+	  --rename-section .data=.sample_mp3,alloc,load,readonly,data,contents \
+	  $< $@
+
+# ----------------------------
+# Intel HDA Audio Driver
+# ----------------------------
+
+build/drivers/audio/hda.o: drivers/audio/hda.c
+	if not exist build\drivers\audio mkdir build\drivers\audio
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/drivers/audio/isa_speaker.o: drivers/audio/isa_speaker.c
+	if not exist build\drivers\audio mkdir build\drivers\audio
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/drivers/audio/sb16.o: drivers/audio/sb16.c
+	if not exist build\drivers\audio mkdir build\drivers\audio
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/drivers/audio/ac97.o: drivers/audio/ac97.c
+	if not exist build\drivers\audio mkdir build\drivers\audio
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ----------------------------
+# VoiceBox Kernel Audio Subsystem
+# ----------------------------
+
+build/kernel/audio/voicebox.o: kernel/audio/voicebox.c
+	if not exist build\kernel\audio mkdir build\kernel\audio
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/kernel/audio/voicebox_server.o: kernel/audio/voicebox_server.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/kernel/audio/audio_clock.o: kernel/audio/audio_clock.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/kernel/sys/sys_audio.o: kernel/sys/sys_audio.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ----------------------------
+# mplayer CLI
+# ----------------------------
+
+build/userland/mplayer/mplayer.o: userland/mplayer/mplayer.c
+	if not exist build\userland\mplayer mkdir build\userland\mplayer
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ----------------------------
 # Disk syscalls
 # ----------------------------
 
@@ -939,6 +1033,7 @@ run: iso disk
 		-cdrom $(ISO_FILE) \
 		-drive file=$(DISK_IMG),format=raw,if=ide \
 		$(QEMU_NET) \
+		$(QEMU_AUDIO) \
 		-serial stdio \
 		-m 1024M
 
@@ -948,6 +1043,7 @@ run-debug: iso disk
 		-cdrom $(ISO_FILE) \
 		-drive file=$(DISK_IMG),format=raw,if=ide \
 		$(QEMU_NET) \
+		$(QEMU_AUDIO) \
 		-serial stdio \
 		-m 1024M \
 		-s -S \
@@ -963,10 +1059,19 @@ run-gdb: iso disk
 		-cdrom $(ISO_FILE) \
 		-drive file=$(DISK_IMG),format=raw,if=ide \
 		$(QEMU_NET) \
+		$(QEMU_AUDIO) \
 		-serial file:serial.log \
 		-m 1024M \
 		-s -S \
 		-no-reboot -no-shutdown
+
+# Run with explicit Windows audio wiring (matches manual command style)
+run-audio: iso
+	$(QEMU) \
+		-cdrom $(ISO_FILE) \
+		-serial file:log.txt \
+		$(QEMU_AUDIO) \
+		-m 1024M
 
 # Run with serial output to file
 run-serial: iso disk

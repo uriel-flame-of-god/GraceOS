@@ -6,8 +6,10 @@
 #include "../chivm/chivm.h"
 #include "../7z/7c.h"
 #include "../gui/gui.h"
+#include "../mplayer/mplayer.h"
 #include "../../kernel/include/syscall.h"
 #include "../../drivers/video/tty.h"
+#include "../../drivers/input/keyboard.h"
 #include "../../drivers/storage/bfs.h"
 #include "../../kernel/mm/pmm/pmm.h"
 #include "../../kernel/mm/vmm/vmm.h"
@@ -339,6 +341,9 @@ static void cmd_help(void)
     shell_print("  whoami       - Print current user\n");
     shell_print("  uptime       - Show system uptime\n");
     shell_print("  snake        - Play Snake game\n");
+    shell_print("  mplayer <file>      - Play WAV/MP3 audio\n");
+    shell_print("  mplayer --sample    - Play embedded test sample\n");
+    shell_print("  mplayer --beep      - PC speaker beep test\n");
     shell_print("  netstat      - Show network status\n");
     shell_print("  ifconfig [ip gw mask] - Show or set IP configuration\n");
     shell_print("  ping <ip> [count]     - ICMP echo test\n");
@@ -1329,6 +1334,12 @@ static void cmd_ping(const char *args)
 
     for (int i = 1; i <= count; i++)
     {
+        if (keyboard_consume_ctrl_c())
+        {
+            shell_println("^C");
+            break;
+        }
+
         sent++;
         int rtt = icmp_ping_one(ip, id, (uint16_t)i, 2000);
         if (rtt >= 0)
@@ -1469,6 +1480,10 @@ static void process_command(const char* cmd)
         cmd_uptime();
     else if(strcmp(cmd, "snake") == 0)
         snake_run();
+    else if (strcmp(cmd, "mplayer") == 0)
+        mplayer_run("");
+    else if (strstart(cmd, "mplayer "))
+        mplayer_run(get_args(cmd));
     else if (strcmp(cmd, "now") == 0)
         cmd_now("");
     else if (strstart(cmd, "now "))
@@ -1553,6 +1568,9 @@ void shell_run(void)
         tty_set_color(TTY_LIGHT_GREY, TTY_BLACK);
         
         shell_read(cmd_buffer, CMD_BUFFER_SIZE);
+
+        /* Fresh command execution starts with cleared interrupt latch. */
+        keyboard_clear_ctrl_c();
         
         process_command(cmd_buffer);
     }

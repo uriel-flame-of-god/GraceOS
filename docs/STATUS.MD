@@ -1,6 +1,6 @@
 # GraceOS (Lumina Kernel) Implementation Status
 
-Last Updated: 2026-04-13
+Last Updated: 2026-04-14
 Version: v0.0.1 (Kernel v0.0.3-dev)
 
 This document tracks which features are complete, in progress, or planned.
@@ -266,6 +266,16 @@ Userland API: `lib/libgrace/llm.c`
 - 13 LLM syscalls: SYS_LLM_LOAD_MODEL (150) through SYS_LLM_GET_INFO (162)
 - Userland C API via `lib/libgrace/llm.c` wrapping all 13 syscalls
 
+### Audio (VoiceBox)
+
+- VoiceBox core/server integrated in kernel (`kernel/audio/`)
+- `mplayer` command integrated in shell for WAV/MP3/sample playback
+- SB16 backend is the default playback path in QEMU when ISA low-memory DMA is available
+- AC97 backend is integrated and can be selected at runtime via `mplayer --switch ac97`
+- Dedicated background audio clock service (`audio_clock`) registered under minit for pacing
+- Embedded sample playback path active via `mplayer --sample`
+- Backend selection now degrades more safely when a preferred backend is unavailable (SB16 -> AC97 -> HDA -> ISA in AUTO mode)
+
 ### Ports
 
 - libsodium: builds as a static library for userland ports (build/ports/libsodium/libsodium.a)
@@ -288,7 +298,14 @@ Module tags: [INIT], [PMM], [VMM], [SASY], [PROC], [SYS]
 
 ## Partially Implemented
 
-_(All previously partial features are now complete. See Fully Implemented above.)_
+Audio backend parity:
+- Intel HDA path is not production-ready for stable audible playback.
+- ISA speaker backend is fallback only (degraded quality).
+- SB16 backend is usable but still has minor jitter/artifacts.
+- AC97 backend is usable but can still exhibit jitter depending on host audio path.
+- On boots with no free pages below 16MB, SB16 may disable and fall back to AC97/other backends.
+
+For detailed backend notes and current recommendations, see `docs/AUDIO.MD`.
 
 ## Not Yet Implemented
 

@@ -73,4 +73,9 @@ unsigned char keyboard_getchar_nonblocking(void);
 int keyboard_haschar();
 void keyboard_service_run(void);
 
+/* Ctrl+C interrupt state helpers (ASCII ETX). */
+int keyboard_ctrl_c_pending(void);
+int keyboard_consume_ctrl_c(void);
+void keyboard_clear_ctrl_c(void);
+
 #endif /* GRACEOS_KEYBOARD_H */

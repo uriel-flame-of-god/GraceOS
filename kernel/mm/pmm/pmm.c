@@ -185,6 +185,29 @@ uint64_t pmm_alloc_page(void)
     return simple_fallback_alloc();
 }
 
+uint64_t pmm_alloc_page_low(void)
+{
+    if (!ready)
+        return simple_fallback_alloc();
+
+    uint64_t max_low_frame = 0x1000000ULL / PAGE_SIZE;
+    if (max_low_frame > max_frames)
+        max_low_frame = max_frames;
+
+    for (uint64_t i = 0; i < max_low_frame; i++)
+    {
+        if (!bitmap_test(i))
+        {
+            bitmap_set(i);
+            used_frames++;
+            return i * PAGE_SIZE;
+        }
+    }
+
+    klog_error("[PMM] No free pages below 16MB for ISA DMA");
+    return 0;
+}
+
 /* Free a physical page */
 void pmm_free_page(uint64_t phys_addr)
 {

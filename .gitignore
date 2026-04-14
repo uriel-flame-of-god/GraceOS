@@ -74,3 +74,6 @@ disk.img
 
 packets.pcap
 *.pcap
+
+sample.mp3
+sample.*.*

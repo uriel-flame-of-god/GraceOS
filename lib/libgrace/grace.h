@@ -104,7 +104,10 @@ typedef enum {
     SEG_CODE,           /* Shared code segment */
     SEG_DATA_AUTO,      /* Automatic data segment */
     SEG_DATA_INST,      /* Instance data segment */
-    SEG_PHYSICAL        /* Physical memory mapping */
+   SEG_PHYSICAL,       /* Physical memory mapping */
+   SEG_DMA,            /* DMA-capable I/O segment */
+   SEG_PHYS_CONTIGUOUS,/* Physically contiguous segment */
+   SEG_LOWMEM          /* Segment constrained below 16MB (ISA DMA) */
 } seg_type_t;
 
 /* Segment handle */
@@ -117,8 +120,14 @@ typedef uint32_t seg_handle_t;
 #define SEG_FLAG_WRITE      0x00000002
 #define SEG_FLAG_EXEC       0x00000004
 #define SEG_FLAG_USER       0x00000008
+#define SEG_FLAG_NOCACHE    0x00000010
 #define SEG_FLAG_DISCARD    0x00000020
+#define SEG_FLAG_NOSWAP     0x00000040
 #define SEG_FLAG_ZEROED     0x00000080
+#define SEG_FLAG_SHARED     0x00000100
+#define SEG_FLAG_IO         0x00000200
+#define SEG_FLAG_DMA_LOW16  0x00000400
+#define SEG_FLAG_PINNED     0x00000800
 
 /* ============================
    File Descriptors

@@ -826,6 +826,15 @@ char* tty_readline(char* buffer, size_t max_len)
         }
 
         tty_cursor_activity();
+
+        if (c == 0x03)
+        {
+            /* Ctrl+C: abort current line input and return empty command. */
+            buffer[0] = '\0';
+            tty_print("^C");
+            tty_newline();
+            return buffer;
+        }
         
         if (c == '\n')
         {

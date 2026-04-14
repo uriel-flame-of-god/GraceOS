@@ -115,7 +115,21 @@ static int sasy_map_now(segment_t* s)
         }
         
         if (i == 0)
+        {
             first_page = page;
+        }
+        else if (page != (first_page + i * PAGE_SIZE))
+        {
+            klog_error("[SEG] Non-contiguous physical allocation");
+
+            /* Free already allocated contiguous prefix and current page */
+            for (uint64_t j = 0; j < i; j++)
+            {
+                pmm_free_page(first_page + j * PAGE_SIZE);
+            }
+            pmm_free_page(page);
+            return -1;
+        }
     }
     
     s->phys = first_page;
@@ -131,10 +145,32 @@ static int sasy_map_now(segment_t* s)
         flags |= VMM_USER;
     if (!(s->flags & SEG_FLAG_EXEC))
         flags |= VMM_NOEXEC;
+    if (s->flags & SEG_FLAG_NOCACHE)
+        flags |= (VMM_PWT | VMM_PCD);
     
     for (uint64_t i = 0; i < pages; i++)
     {
-        vmm_map(virt + i * PAGE_SIZE, phys + i * PAGE_SIZE, flags);
+        uint64_t vaddr = virt + i * PAGE_SIZE;
+        uint64_t paddr = phys + i * PAGE_SIZE;
+
+        vmm_map(vaddr, paddr, flags);
+
+        if (vmm_translate(vaddr) != paddr)
+        {
+            klog_error("[SEG] Virtual mapping failed");
+
+            for (uint64_t j = 0; j <= i; j++)
+            {
+                vmm_unmap(virt + j * PAGE_SIZE);
+            }
+
+            for (uint64_t j = 0; j < pages; j++)
+            {
+                pmm_free_page(first_page + j * PAGE_SIZE);
+            }
+
+            return -1;
+        }
     }
     
     /* Zero-fill if requested */
