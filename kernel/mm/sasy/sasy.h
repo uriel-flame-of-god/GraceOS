@@ -16,8 +16,8 @@
    ============================ */
 
 #define MAX_SEGMENTS        4096
-#define SASY_BASE_ADDR      0x0000100000000000ULL  /* Segment virtual base */
-#define SASY_MAX_SIZE       0x0000010000000000ULL  /* 1TB max segment space */
+#define SASY_BASE_ADDR      0xFFFF800010000000ULL  /* Segment virtual base (kernel canonical) */
+#define SASY_MAX_SIZE       0x0000100000000000ULL  /* 16TB max segment space */
 
 /* ============================
    SASY Public API

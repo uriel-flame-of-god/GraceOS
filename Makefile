@@ -4,6 +4,17 @@
 
 NAME := graceos
 
+# ============================
+# Architecture selection
+# Usage:
+#   make               — build x86_64 ISO (default)
+#   make ARCH=arm64    — build ARM64 kernel8.img for Raspberry Pi
+#   make ARCH=arm64 RPI_MODEL=4  — build for Pi 4
+# ============================
+
+ARCH      ?= x86_64
+RPI_MODEL ?= 3
+UART      ?= mini
 
 # ============================
 # Directories
@@ -17,8 +28,11 @@ DRIVERS := drivers
 TOOLS   := tools
 ISO_DIR := iso
 
+# ARM64 uses a separate build root to avoid mixing objects
+BUILD_ARM64 := build_arm64
+
 # ============================
-# Ports (optional)
+# Ports (optional, x86_64 only)
 # ============================
 
 PORTS_DIR := ports
@@ -30,27 +44,84 @@ endif
 ifneq ($(PORTS),)
 PORTS_ENABLED := 1
 endif
+
+ifeq ($(ARCH),arm64)
+ALL_TARGETS := kernel8
+else
 ifeq ($(PORTS_ENABLED),1)
 ALL_TARGETS := ports iso
 else
 ALL_TARGETS := iso
 endif
+endif
 
 
 # ============================
-# Tools
+# Tools (shared)
 # ============================
 
-FASM := fasm
-
-CLANG := clang
-LLD   := ld.lld
-
+FASM    := fasm
+CLANG   := clang
+LLD     := ld.lld
 OBJCOPY := llvm-objcopy
 GRUB_MKRESCUE := wsl grub2-mkrescue
 
-CC := $(CLANG) --target=x86_64-elf
-QEMU ?= qemu-system-x86_64
+# ============================
+# Architecture-specific settings
+# ============================
+
+ifeq ($(ARCH),arm64)
+
+# --- Raspberry Pi base address ---
+ifeq ($(RPI_MODEL),4)
+RPI_BASE := 0xFE000000
+else
+RPI_BASE := 0x3F000000
+endif
+
+CC      := $(CLANG) --target=aarch64-elf
+QEMU    ?= qemu-system-aarch64
+
+CFLAGS  := -ffreestanding -fno-stack-protector -fno-pic \
+           -O2 -Wall -Wextra \
+           -nostdlib -nostdinc \
+           -Ilib/libc -Ilib/libtranslate -Iinclude \
+           -DARCH_ARM64 -DRPI_MODEL=$(RPI_MODEL) -DRPI_BASE=$(RPI_BASE)
+
+ifeq ($(UART),pl011)
+CFLAGS += -DUSE_PL011
+endif
+
+ASFLAGS := -ffreestanding
+
+LDFLAGS := -nostdlib
+
+ KERNEL_ELF := $(BUILD_ARM64)/kernel.elf
+ KERNEL_IMG := kernel8.img
+
+else
+
+# --- x86_64 (default) ---
+CC      := $(CLANG) --target=x86_64-elf
+QEMU    ?= qemu-system-x86_64
+
+CFLAGS  := -ffreestanding -fno-stack-protector -fno-pic \
+           -m64 -O2 -Wall -Wextra \
+           -nostdlib -nostdinc -Ilib/libc -Ilib/libtranslate -Iinclude
+
+ASFLAGS := -ffreestanding -m64
+
+LDFLAGS := -nostdlib -z max-page-size=0x1000
+
+KERNEL_ELF := build\kernel.elf
+ISO_FILE   := $(NAME).iso
+
+endif
+
+# ============================
+# Common QEMU / disk settings (x86_64 only)
+# ============================
+
 QEMU_LOG := qemu.log
 DISK_IMG := disk.img
 DISK_SIZE := 64M
@@ -60,24 +131,12 @@ QEMU_AUDIO := $(QEMU_AUDIODEV) -machine pcspk-audiodev=snd0 -device intel-hda -d
 
 
 # ============================
-# Flags
-# ============================
-
-CFLAGS := -ffreestanding -fno-stack-protector -fno-pic \
-		  -m64 -O2 -Wall -Wextra \
-		  -nostdlib -nostdinc -Ilib/libc -Ilib/libtranslate -Iinclude
-
-ASFLAGS := -ffreestanding -m64
-
-LDFLAGS := -nostdlib -z max-page-size=0x1000
-
-
-# ============================
 # Files
 # ============================
 
 FONT_FILE := kernel/font/default.psf2
 FONT_OBJ  := build/kernel/font/default_font.o
+FONT_OBJ_ARM64 := $(BUILD_ARM64)/kernel/font/default_font.o
 
 # Audio samples (embedded via llvm-objcopy, same technique as font)
 SAMPLE_MP3_SRC := kernel/samples/sample.mp3
@@ -144,6 +203,9 @@ PROC_SECURITY_OBJ := build/kernel/proc/security.o
 MINIT_TREE_OBJ    := build/kernel/proc/minit/tree.o
 MINIT_EXHAUST_OBJ := build/kernel/proc/minit/exhaustion.o
 MINIT_ORCH_OBJ    := build/kernel/proc/minit/orchestration.o
+
+# Logger — background log service (minit-managed)
+LOGGER_OBJ := build/kernel/proc/logger/logger.o
 
 # spm — Security Policy Manager
 SPM_OBJ := build/kernel/spm/spm.o
@@ -321,6 +383,7 @@ OBJ := \
 	$(MINIT_TREE_OBJ) \
 	$(MINIT_EXHAUST_OBJ) \
 	$(MINIT_ORCH_OBJ) \
+	$(LOGGER_OBJ) \
 	$(SPM_OBJ) \
 	$(SYS_DISK_OBJ) \
 	$(SYS_SPM_OBJ) \
@@ -372,9 +435,49 @@ OBJ := \
 	$(SYS_NET_OBJ)
 
 
-KERNEL_ELF := build\kernel.elf
-ISO_FILE   := $(NAME).iso
+# ============================
+# ARM64 Object List
+# Minimal subset for Raspberry Pi bring-up
+# ============================
 
+ARM64_BOOT_OBJ     := $(BUILD_ARM64)/boot.o
+ARM64_CONTEXT_OBJ  := $(BUILD_ARM64)/kernel/arch/arm64/context.o
+
+ARM64_OBJ := \
+	$(BUILD_ARM64)/kernel/arch/arm64/exceptions.o \
+	$(BUILD_ARM64)/kernel/arch/arm64/mailbox.o \
+	$(BUILD_ARM64)/kernel/arch/arm64/power.o \
+	$(BUILD_ARM64)/kernel/core/kmain_arm64.o \
+	$(BUILD_ARM64)/kernel/core/multiboot.o \
+	$(BUILD_ARM64)/kernel/core/sysinfo.o \
+	$(BUILD_ARM64)/kernel/core/time.o \
+	$(BUILD_ARM64)/kernel/log/klog.o \
+	$(BUILD_ARM64)/kernel/mm/kheap.o \
+	$(BUILD_ARM64)/kernel/mm/pmm/pmm.o \
+	$(BUILD_ARM64)/kernel/mm/pmm/bitmap.o \
+	$(BUILD_ARM64)/kernel/mm/fallback/simple_fallback.o \
+	$(BUILD_ARM64)/kernel/proc/proc.o \
+	$(BUILD_ARM64)/kernel/proc/table.o \
+	$(BUILD_ARM64)/kernel/proc/sched.o \
+	$(BUILD_ARM64)/kernel/proc/pipe.o \
+	$(BUILD_ARM64)/kernel/proc/context.o \
+	$(BUILD_ARM64)/kernel/proc/wait.o \
+	$(BUILD_ARM64)/kernel/proc/zombie.o \
+	$(BUILD_ARM64)/kernel/proc/job.o \
+	$(BUILD_ARM64)/kernel/proc/security.o \
+	$(BUILD_ARM64)/kernel/spm/spm.o \
+	$(BUILD_ARM64)/kernel/font/font.o \
+	$(FONT_OBJ_ARM64) \
+	$(BUILD_ARM64)/drivers/video/uart_rpi.o \
+	$(BUILD_ARM64)/drivers/video/tty.o \
+	$(BUILD_ARM64)/drivers/video/fb_console.o \
+	$(BUILD_ARM64)/drivers/input/keyboard.o \
+	$(BUILD_ARM64)/lib/libc/string.o \
+	$(BUILD_ARM64)/lib/libc/float.o \
+	$(BUILD_ARM64)/lib/libc/array.o \
+	$(BUILD_ARM64)/lib/libtranslate/stdio.o \
+	$(BUILD_ARM64)/lib/libtranslate/ctype.o \
+	$(BUILD_ARM64)/lib/libtranslate/math.o
 
 
 # ============================
@@ -435,6 +538,7 @@ dirs:
 	if not exist build\userland\doas mkdir build\userland\doas
 	if not exist build\kernel\spm mkdir build\kernel\spm
 	if not exist build\kernel\proc\minit mkdir build\kernel\proc\minit
+	if not exist build\kernel\proc\logger mkdir build\kernel\proc\logger
 	if not exist build\kernel\font mkdir build\kernel\font
 	if not exist build\drivers\net mkdir build\drivers\net
 	if not exist build\kernel\net mkdir build\kernel\net
@@ -448,8 +552,39 @@ dirs:
 	if not exist build\drivers\audio mkdir build\drivers\audio
 	if not exist build\userland\mplayer mkdir build\userland\mplayer
 
+# ----------------------------
+# ARM64 build directories
+# ----------------------------
+
+dirs_arm64:
+	if not exist $(BUILD_ARM64) mkdir $(BUILD_ARM64)
+	if not exist $(BUILD_ARM64)\kernel mkdir $(BUILD_ARM64)\kernel
+	if not exist $(BUILD_ARM64)\kernel\arch mkdir $(BUILD_ARM64)\kernel\arch
+	if not exist $(BUILD_ARM64)\kernel\arch\arm64 mkdir $(BUILD_ARM64)\kernel\arch\arm64
+	if not exist $(BUILD_ARM64)\kernel\core mkdir $(BUILD_ARM64)\kernel\core
+	if not exist $(BUILD_ARM64)\kernel\log mkdir $(BUILD_ARM64)\kernel\log
+	if not exist $(BUILD_ARM64)\kernel\mm mkdir $(BUILD_ARM64)\kernel\mm
+	if not exist $(BUILD_ARM64)\kernel\mm\pmm mkdir $(BUILD_ARM64)\kernel\mm\pmm
+	if not exist $(BUILD_ARM64)\kernel\mm\fallback mkdir $(BUILD_ARM64)\kernel\mm\fallback
+	if not exist $(BUILD_ARM64)\kernel\mm\sasy mkdir $(BUILD_ARM64)\kernel\mm\sasy
+	if not exist $(BUILD_ARM64)\kernel\proc mkdir $(BUILD_ARM64)\kernel\proc
+	if not exist $(BUILD_ARM64)\kernel\proc\minit mkdir $(BUILD_ARM64)\kernel\proc\minit
+	if not exist $(BUILD_ARM64)\kernel\proc\logger mkdir $(BUILD_ARM64)\kernel\proc\logger
+	if not exist $(BUILD_ARM64)\kernel\spm mkdir $(BUILD_ARM64)\kernel\spm
+	if not exist $(BUILD_ARM64)\kernel\font mkdir $(BUILD_ARM64)\kernel\font
+	if not exist $(BUILD_ARM64)\drivers mkdir $(BUILD_ARM64)\drivers
+	if not exist $(BUILD_ARM64)\drivers\video mkdir $(BUILD_ARM64)\drivers\video
+	if not exist $(BUILD_ARM64)\drivers\input mkdir $(BUILD_ARM64)\drivers\input
+	if not exist $(BUILD_ARM64)\userland mkdir $(BUILD_ARM64)\userland
+	if not exist $(BUILD_ARM64)\userland\shell mkdir $(BUILD_ARM64)\userland\shell
+	if not exist $(BUILD_ARM64)\lib mkdir $(BUILD_ARM64)\lib
+	if not exist $(BUILD_ARM64)\lib\libc mkdir $(BUILD_ARM64)\lib\libc
+	if not exist $(BUILD_ARM64)\lib\libtranslate mkdir $(BUILD_ARM64)\lib\libtranslate
+	if not exist $(BUILD_ARM64)\lib\libgrace mkdir $(BUILD_ARM64)\lib\libgrace
+
 # Ensure all object outputs wait for directory creation in parallel builds.
 $(OBJ) $(BOOT_OBJ) $(FONT_OBJ): dirs
+$(ARM64_OBJ) $(ARM64_BOOT_OBJ) $(ARM64_CONTEXT_OBJ): dirs_arm64
 
 $(FONT_OBJ): $(FONT_FILE)
 	$(OBJCOPY) \
@@ -458,13 +593,54 @@ $(FONT_OBJ): $(FONT_FILE)
 	  --rename-section .data=.font,alloc,load,readonly,data,contents \
 	  $< $@
 
+$(FONT_OBJ_ARM64): $(FONT_FILE)
+	$(OBJCOPY) \
+	  -I binary \
+	  -O elf64-littleaarch64 \
+	  --rename-section .data=.font,alloc,load,readonly,data,contents \
+	  $< $@
+
 
 # ----------------------------
-# Boot
+# Boot (x86_64 — FASM Multiboot2)
 # ----------------------------
 
 boot: dirs
 	$(FASM) boot/boot.asm $(BOOT_OBJ)
+
+# ----------------------------
+# Boot (ARM64 — clang assembler)
+# ----------------------------
+
+$(BUILD_ARM64)/boot.o: boot/arm64/boot.S dirs_arm64
+	$(CLANG) --target=aarch64-elf $(ASFLAGS) -DARCH_ARM64 -c $< -o $@
+
+$(BUILD_ARM64)/kernel/arch/arm64/context.o: kernel/arch/arm64/context.S dirs_arm64
+	$(CLANG) --target=aarch64-elf $(ASFLAGS) -DARCH_ARM64 -c $< -o $@
+
+$(BUILD_ARM64)/kernel/arch/arm64/exceptions.o: kernel/arch/arm64/exceptions.S dirs_arm64
+	$(CLANG) --target=aarch64-elf $(ASFLAGS) -DARCH_ARM64 -c $< -o $@
+
+# ARM64 C compilation pattern
+$(BUILD_ARM64)/%.o: %.c dirs_arm64
+	$(CLANG) --target=aarch64-elf $(CFLAGS) -c $< -o $@
+
+# ARM64 link + flat binary
+kernel8: dirs_arm64 $(ARM64_BOOT_OBJ) $(ARM64_CONTEXT_OBJ) $(ARM64_OBJ)
+	$(LLD) $(LDFLAGS) \
+		-T kernel/arch/arm64/linker.ld \
+		$(ARM64_BOOT_OBJ) $(ARM64_CONTEXT_OBJ) $(ARM64_OBJ) \
+		-o $(KERNEL_ELF)
+	$(OBJCOPY) -O binary $(KERNEL_ELF) $(KERNEL_IMG)
+	@echo ARM64 build complete: $(KERNEL_IMG)
+
+# QEMU test target for ARM64 (Pi 3b)
+run-arm64: kernel8
+	$(QEMU) \
+		-M raspi3b \
+		-kernel $(KERNEL_IMG) \
+		-serial stdio \
+		-m 1024M
 
 
 # ----------------------------
@@ -750,6 +926,13 @@ build/kernel/proc/minit/exhaustion.o: kernel/proc/minit/exhaustion.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/kernel/proc/minit/orchestration.o: kernel/proc/minit/orchestration.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ----------------------------
+# Logger — background log service
+# ----------------------------
+
+build/kernel/proc/logger/logger.o: kernel/proc/logger/logger.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ----------------------------
@@ -1146,6 +1329,11 @@ clean:
 	if exist debug.log del debug.log
 	if exist $(QEMU_LOG) del $(QEMU_LOG)
 
+# Clean ARM64 build artifacts
+clean-arm64:
+	if exist $(BUILD_ARM64) rmdir /s /q $(BUILD_ARM64)
+	if exist $(KERNEL_IMG) del $(KERNEL_IMG)
+
 # Clean just serial logs
 clean-logs:
 	if exist serial.log del serial.log
@@ -1162,4 +1350,7 @@ view-serial:
 	)
 
 
-.PHONY: all ports port -port port-% dirs boot kernel iso run run-debug run-gdb run-serial run-both run-multiserial run-quick run-vga quick clean clean-logs view-serial disk
+.PHONY: all ports port -port port-% dirs dirs_arm64 boot kernel iso \
+        kernel8 run-arm64 \
+        run run-debug run-gdb run-serial run-both run-multiserial run-quick run-vga quick \
+        clean clean-arm64 clean-logs view-serial disk

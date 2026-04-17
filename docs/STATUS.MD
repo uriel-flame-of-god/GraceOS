@@ -1,9 +1,45 @@
 # GraceOS (Lumina Kernel) Implementation Status
 
-Last Updated: 2026-04-14
-Version: v0.0.1 (Kernel v0.0.3-dev)
+Last Updated: 2026-04-17
+Version: v0.6.1 (Kernel v0.3.5)
 
 This document tracks which features are complete, in progress, or planned.
+
+---
+
+## Changelog
+
+### v0.6.1 / Kernel v0.3.5 — 2026-04-17
+
+**Fixes**
+- **Logger (klog)**: Kernel logger subsystem now fully operational. Log levels
+  (`INIT`, `INFO`, `WARN`, `ERROR`) route correctly to both the serial console
+  and the in-memory ring buffer. Earlier builds had a silent init-ordering bug
+  where `klog_init()` was called before the UART was ready.
+- **minit**: Process orchestration layer fixed. Service tree construction, restart
+  policy, and exhaustion handling now work correctly. Previously minit could
+  deadlock during boot if a service exited before its dependents were registered.
+- **sysinfo CPU decode**: ARM64 MIDR PartNum now decoded to exact core name
+  (Cortex-A53, Cortex-A72, …) instead of hardcoded `"ARM Cortex (BCM2837/BCM2711)"`.
+  Implementer byte now decoded to vendor string.
+- **sysinfo memory**: ARM64 total RAM derived from `RPI_MODEL` compile-time
+  constant (1 GiB for Pi 3, 4 GiB for Pi 4) instead of a hardcoded 1 GiB literal.
+- **Console readline (ARM64)**: Removed blind pre-classification echo, fixed
+  double-newline on Enter, fixed backspace double-erase, fixed ESC sequence
+  leaving `[A` in the command buffer.
+- **Keyboard driver (ARM64)**: Eliminated dead 256-byte circular buffer and
+  `keyboard_service_run()` polling thread. ARM64 path is now thin UART wrappers —
+  one input system, no architectural split.
+- **ESC handling**: Replaced 50,000-NOP timing-based busy-wait with an ANSI
+  CSI sequence drain (`while (uart_rx_ready()) { read; if final-byte break; }`).
+  Works reliably on both QEMU and real hardware.
+
+**ARM64 / Raspberry Pi 3B**
+- Port is **currently in active development and broken** — boots to banner,
+  UART I/O works in QEMU, but real-hardware input, framebuffer stability, and
+  several subsystems remain unfinished. See [RPI3B.MD](RPI3B.MD) for full details.
+
+---
 
 ## Code Size Snapshot
 

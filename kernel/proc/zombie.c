@@ -5,7 +5,9 @@
 
 #include "proc.h"
 #include "sched.h"
+#ifndef ARCH_ARM64
 #include "../mm/sasy/sasy.h"
+#endif
 #include "../log/klog.h"
 #include "../../lib/libc/string.h"
 
@@ -38,7 +40,9 @@ void proc_exit(int code)
     p->exit_signal = 0;
     
     /* Release SASY segments */
+#ifndef ARCH_ARM64
     sasy_release_process(p->pid);
+#endif
     
     /* Clear segment handles */
     for (int i = 0; i < PROC_MAX_SEGMENTS; i++)
@@ -81,7 +85,11 @@ void proc_exit(int code)
     /* Should never reach here */
     for (;;)
     {
+        #ifdef ARCH_ARM64
+        __asm__ volatile ("wfe");
+        #else
         __asm__ volatile ("hlt");
+        #endif
     }
 }
 
@@ -101,7 +109,9 @@ void proc_terminate(process_t* p, int signal)
     p->exit_code = 0;
     
     /* Release resources */
+#ifndef ARCH_ARM64
     sasy_release_process(p->pid);
+#endif
     
     /* Clear segments */
     for (int i = 0; i < PROC_MAX_SEGMENTS; i++)
@@ -171,7 +181,9 @@ void panic_exit(process_t* p)
     sched_remove(p);
     
     /* Release what we can */
+#ifndef ARCH_ARM64
     sasy_release_process(p->pid);
+#endif
     
     /* Reparent children */
     proc_reparent_children(p->pid);

@@ -452,16 +452,34 @@ static void cmd_about(void)
     shell_print("  open, close, list, getkey\n\n");
 }
 
-static void cmd_ls(void)
+static void cmd_ls(const char* args)
 {
-    /* Convert shell_cwd to a BFS prefix (no leading slash). */
+    /* Determine the directory to list */
+    char target_dir[SHELL_PATH_MAX];
+
+    if (!args || *args == '\0')
+    {
+        /* No arguments: list current directory */
+        shell_copy_str(target_dir, shell_cwd, (int)sizeof(target_dir));
+    }
+    else
+    {
+        /* Argument provided: resolve the path */
+        if (!shell_resolve_path(args, target_dir, (int)sizeof(target_dir)))
+        {
+            shell_println("Invalid path");
+            return;
+        }
+    }
+
+    /* Convert shell path to BFS prefix (no leading slash) */
     char prefix[SHELL_PATH_MAX];
-    if (shell_cwd[0] == '/' && shell_cwd[1] == '\0')
+    if (target_dir[0] == '/' && target_dir[1] == '\0')
         prefix[0] = '\0';
     else
-        shell_to_fs_path(shell_cwd, prefix, (int)sizeof(prefix));
+        shell_to_fs_path(target_dir, prefix, (int)sizeof(prefix));
 
-    /* Show . always, and .. when not at root. */
+    /* Show . and .. entries */
     tty_set_color(TTY_LIGHT_BLUE, TTY_BLACK);
     shell_println(".");
     if (prefix[0] != '\0')
@@ -1441,7 +1459,9 @@ static void process_command(const char* cmd)
     else if (strcmp(cmd, "echo") == 0)
         shell_println("");
     else if (strcmp(cmd, "ls") == 0)
-        cmd_ls();
+        cmd_ls("");
+    else if (strstart(cmd, "ls "))
+        cmd_ls(get_args(cmd));
     else if (strcmp(cmd, "cfdisk") == 0)
         shell_println("cfdisk: temporarily disabled");
     else if (strcmp(cmd, "mkdir") == 0)

@@ -1,5 +1,8 @@
 #include "snake.h"
 #include "../raylib/raylib.h"
+#include "../../lib/libc/int.h"
+#include "../../lib/libc/string.h"
+#include "../../lib/libgrace/grace.h"
 
 #define GRID_COLS (GAME_WIDTH / GRID_SIZE)
 #define GRID_ROWS (GAME_HEIGHT / GRID_SIZE)
@@ -10,8 +13,9 @@ typedef struct snake_seg {
 } snake_seg_t;
 
 typedef struct snake_game {
-	snake_seg_t body[SNAKE_MAX_LENGTH];
+	snake_seg_t* body;          /* Dynamically allocated body segments */
 	int length;
+	int max_length;             /* Current allocation size */
 	int dir_x;
 	int dir_y;
 	int next_dir_x;
@@ -21,9 +25,12 @@ typedef struct snake_game {
 	int score;
 	int game_over;
 	int paused;
+	uint64_t last_move_time;
+	float move_timer;
 } snake_game_t;
 
 static snake_game_t g_game;
+static int g_game_initialized = 0;
 
 static void int_to_text(int value, char* out)
 {
@@ -123,6 +130,8 @@ static void reset_game(void)
 	g_game.score = 0;
 	g_game.game_over = 0;
 	g_game.paused = 0;
+	g_game.move_timer = 0.0f;
+	g_game.last_move_time = time_ms();
 
 	g_game.dir_x = 1;
 	g_game.dir_y = 0;
@@ -304,29 +313,109 @@ static void draw_game(void)
 	EndDrawing();
 }
 
-void snake_run(void)
+/* ============================
+   Non-Blocking Game API
+   ============================ */
+
+void snake_init(void)
 {
-	InitWindow(GAME_WIDTH, GAME_HEIGHT, "Snake");
-	SetTargetFPS(60);
+	if (g_game_initialized)
+		return;
 
+	InitWindow(GAME_WIDTH, GAME_HEIGHT, "GraceOS Snake");
+	SetTargetFPS(GAME_TARGET_FPS);
+
+	memset(&g_game, 0, sizeof(g_game));
+
+	/* Allocate body segments dynamically */
+	g_game.body = (snake_seg_t*)malloc(SNAKE_MAX_LENGTH * sizeof(snake_seg_t));
+	if (!g_game.body)
+		return;
+
+	g_game.max_length = SNAKE_MAX_LENGTH;
 	reset_game();
+	g_game.last_move_time = time_ms();
+	g_game_initialized = 1;
+}
 
-	float move_timer = 0.0f;
-	const float step_time = 0.11f;
+int snake_update(float dt)
+{
+	if (!g_game_initialized)
+		return 0;
 
-	while (!WindowShouldClose())
+	handle_input();
+
+	/* Accumulate delta time for move updates */
+	const float move_step_time = 0.11f;  /* ~110ms between moves */
+	g_game.move_timer += dt;
+
+	while (g_game.move_timer >= move_step_time && !g_game.game_over && !g_game.paused)
 	{
-		handle_input();
+		update_game();
+		g_game.move_timer -= move_step_time;
+	}
 
-		move_timer += GetFrameTime();
-		while (move_timer >= step_time)
-		{
-			update_game();
-			move_timer -= step_time;
-		}
+	return !window_should_close;
+}
 
-		draw_game();
+void snake_render(void)
+{
+	if (!g_game_initialized)
+		return;
+
+	draw_game();
+}
+
+void snake_shutdown(void)
+{
+	if (!g_game_initialized)
+		return;
+
+	if (g_game.body)
+	{
+		free(g_game.body);
+		g_game.body = NULL;
 	}
 
 	CloseWindow();
+	g_game_initialized = 0;
+}
+
+/* ============================
+   Legacy Blocking API (for shell integration)
+   ============================ */
+
+void snake_run(void)
+{
+	snake_init();
+
+	uint64_t last_frame_ms = time_ms();
+
+	while (!WindowShouldClose() && g_game_initialized)
+	{
+		uint64_t now_ms = time_ms();
+		uint64_t delta_ms = now_ms - last_frame_ms;
+
+		float dt = (float)delta_ms / 1000.0f;
+		/* Clamp dt to prevent huge jumps */
+		if (dt > 0.250f)
+			dt = 0.250f;
+		if (dt < 0.001f)
+			dt = 0.001f;
+
+		last_frame_ms = now_ms;
+
+		if (snake_update(dt))
+		{
+			BeginDrawing();
+			snake_render();
+			EndDrawing();
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	snake_shutdown();
 }

@@ -57,7 +57,13 @@ static void minit_kernel_trampoline(void)
     schedule();
 
     for (;;)
+    {
+        #ifdef ARCH_ARM64
+        __asm__ volatile ("wfe");
+        #else
         __asm__ volatile ("hlt");
+        #endif
+    }
 }
 
 /* ============================
@@ -100,12 +106,18 @@ int minit_spawn(minit_node_t* node)
          proc_check_sleepers which tries to acquire the same lock. If the
          IRQ fires while we hold the lock, the ISR spins with interrupts
          disabled → deadlock. cli here prevents that window. */
+     #ifdef ARCH_ARM64
+     __asm__ volatile ("msr daifset, #2"); /* Mask IRQ */
+     process_t* p = proc_create(NULL);
+     __asm__ volatile ("msr daifclr, #2"); /* Unmask IRQ */
+     #else
      uint64_t irq_flags = 0;
      __asm__ volatile ("pushfq; pop %0" : "=r"(irq_flags));
      __asm__ volatile ("cli");
      process_t* p = proc_create(NULL);
      if (irq_flags & (1ULL << 9))
           __asm__ volatile ("sti");
+     #endif
 
     if (!p)
     {

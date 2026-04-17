@@ -1,8 +1,8 @@
 # Lumina Kernel Documentation
 
-**Version**: v0.0.2-dev  
+**Version**: v0.3.5  
 **Architecture**: x86_64  
-**Last Updated**: March 9, 2026
+**Last Updated**: April 17, 2026
 
 ---
 

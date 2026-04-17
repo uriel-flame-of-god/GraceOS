@@ -3,8 +3,54 @@
 // ============================
 
 #include "keyboard.h"
-#include "../../kernel/arch/x86_64/io/port.h"
 #include "../../kernel/log/klog.h"
+
+#ifdef ARCH_ARM64
+// ================================================================
+// ARM64 / Raspberry Pi Keyboard — thin UART wrappers
+//
+// There is no PS/2 controller on the RPi.  One input system only:
+// the console reads uart_getchar() directly.  These wrappers keep
+// the keyboard API callable from shared code without a dead buffer
+// or a service thread that is never started.
+// ================================================================
+
+#include "../../drivers/video/uart_rpi.h"
+
+static volatile int kb_ctrl_c_pending = 0;
+
+void keyboard_init(void)    { /* uart_init() called earlier by tty_init() */ }
+void keyboard_handler(void) { /* no IRQ — UART is polled */                  }
+
+int keyboard_haschar(void)
+{
+    return uart_rx_ready();
+}
+
+unsigned char keyboard_getchar(void)
+{
+    char c = uart_getchar();            /* blocking */
+    if (c == 0x03) kb_ctrl_c_pending = 1;
+    return (unsigned char)(c == '\r' ? '\n' : c);
+}
+
+unsigned char keyboard_getchar_nonblocking(void)
+{
+    char c = uart_getchar_nb();         /* 0 if empty */
+    if (c == 0x03) kb_ctrl_c_pending = 1;
+    return (unsigned char)(c == '\r' ? '\n' : c);
+}
+
+/* Not used — no service thread on ARM64 */
+void keyboard_service_run(void) { for (;;) __asm__ volatile ("wfe"); }
+
+int  keyboard_ctrl_c_pending(void) { return kb_ctrl_c_pending; }
+int  keyboard_consume_ctrl_c(void) { if (kb_ctrl_c_pending) { kb_ctrl_c_pending = 0; return 1; } return 0; }
+void keyboard_clear_ctrl_c(void)   { kb_ctrl_c_pending = 0; }
+
+#else  /* !ARCH_ARM64 — original PS/2 implementation */
+
+#include "../../kernel/arch/x86_64/io/port.h"
 
 /* Keyboard I/O Ports */
 #define KB_DATA_PORT    0x60
@@ -425,3 +471,5 @@ void keyboard_clear_ctrl_c(void)
 {
     kb_ctrl_c_pending = 0;
 }
+
+#endif /* ARCH_ARM64 */

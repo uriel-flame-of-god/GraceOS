@@ -25,6 +25,7 @@
 #include "../audio/voicebox.h"
 #include "../audio/audio_clock.h"
 #include "../audio/voicebox_server.h"
+#include "../proc/logger/logger.h"
 
 /* Kernel end symbol from linker */
 extern char end;
@@ -151,7 +152,7 @@ void kmain(uint64_t multiboot_info)
     // Display boot banner
     tty_set_color(TTY_WHITE, TTY_BLUE);
     tty_print("                                                                                ");
-    tty_print("                         Lumina Kernel v0.0.3-dev                                  ");
+    tty_print("                            Lumina Kernel v0.3.5                                  ");
     tty_print("                                                                                ");
     tty_set_color(TTY_LIGHT_GREY, TTY_BLACK);
     tty_print("\n\n");
@@ -229,7 +230,7 @@ void kmain(uint64_t multiboot_info)
     }
 
     int bfs_result = bfs_init(&g_bfs, fs_size, fs_base);
-    
+
     if (bfs_result != 0)
     {
         // Not formatted, format it
@@ -240,7 +241,46 @@ void kmain(uint64_t multiboot_info)
     {
         klog_log("BranchFS mounted");
     }
-    
+
+    // Initialize BranchFS directory structure
+    klog_init_msg("Creating BranchFS root directories");
+
+    /* Create standard directories at root level using bfs_create with size=0.
+       When size=0, bfs_create creates a directory entry instead of a file. */
+    static const char* directories[] = {
+        "system",
+        "tmp",
+        "var",
+        "bin",
+        "home",
+    };
+
+    int dir_count = sizeof(directories) / sizeof(directories[0]);
+
+    for (int i = 0; i < dir_count; i++)
+    {
+        /* bfs_create returns 0 on success, -1 if already exists, -2 if no space */
+        int result = bfs_create(&g_bfs, directories[i], 0);
+
+        if (result == 0)
+        {
+            klog_log("Created directory: ");
+            klog_log(directories[i]);
+        }
+        else if (result == -1)
+        {
+            /* Directory already exists — this is fine on subsequent boots */
+            klog_log("Directory exists: ");
+            klog_log(directories[i]);
+        }
+        else
+        {
+            klog_warn("BranchFS: failed to create directory");
+        }
+    }
+
+    klog_log("BranchFS directory structure ready");
+
     // Initialize SASY (Segment Allocator System)
     klog_init_msg("Initializing SASY segment allocator");
     sasy_init();
@@ -280,6 +320,24 @@ void kmain(uint64_t multiboot_info)
     // Initialize network stack
     klog_init_msg("Initializing network stack");
     net_init();
+
+    // Register and spawn the background logger service with minit.
+    // minit's only job: start it, restart it on crash (up to 3 times),
+    // stop it when exhausted.  All orchestration goes through minit+SASY.
+    klog_init_msg("Registering logger service with minit");
+    minit_node_t* logger_node = minit_register("logger", minit_root);
+    if (logger_node)
+    {
+        logger_node->entry_fn     = logger_service_main;
+        logger_node->auto_restart = true;
+        logger_node->max_restarts = 3;
+        logger_node->base_priority = PRIO_IDLE; /* background — lowest priority */
+        minit_spawn(logger_node);
+    }
+    else
+    {
+        klog_warn("minit: failed to register logger node");
+    }
 
     // Register VoiceBox Server with minit
     klog_init_msg("Registering VoiceBox server with minit");

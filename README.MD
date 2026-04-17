@@ -1,6 +1,6 @@
 # GraceOS (Lumina Kernel)
 
-**Version**: v0.6.0 (Kernel v0.0.3-dev)
+**Version**: v0.6.1 (Kernel v0.3.5)
 
 A minimal 64-bit operating system built on the **Lumina Kernel**, inspired by Windows NT and MS-DOS 4.0.
 

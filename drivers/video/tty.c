@@ -3,6 +3,160 @@
 // ============================
 
 #include "tty.h"
+
+#ifdef ARCH_ARM64
+// ================================================================
+// ARM64 / Raspberry Pi TTY
+// Routes all output to the RPi UART (mini-UART or PL011).
+// Colors are accepted by the API but ignored — UART is plain text.
+// tty_readline uses the UART directly for line input.
+// ================================================================
+
+#include "uart_rpi.h"
+#include "fb_console.h"
+#include "../input/keyboard.h"
+#include "../../lib/libc/string.h"
+
+/* Color is ignored on UART — just track it to satisfy callers */
+static uint8_t cur_fg = 7;
+static uint8_t cur_bg = 0;
+static int fb_console_ready = 0;
+
+static inline void tty_putc_both(char c)
+{
+    uart_putchar(c);
+    if (fb_console_ready)
+        fb_console_putchar(c);
+}
+
+static inline void tty_puts_both(const char* s)
+{
+    uart_print(s);
+    if (fb_console_ready)
+        fb_console_puts(s);
+}
+
+void tty_init(void)
+{
+    uart_init();
+    fb_console_ready = (fb_console_init() == 0);
+}
+
+void tty_clear(void)
+{
+    /* Send ANSI clear-screen sequence — most serial terminals support it */
+    tty_puts_both("\033[2J\033[H");
+    if (fb_console_ready)
+        fb_console_clear();
+}
+
+void tty_set_color(uint8_t fg, uint8_t bg)
+{
+    cur_fg = fg & 0x0F;
+    cur_bg = bg & 0x0F;
+}
+
+void tty_get_color(uint8_t* fg, uint8_t* bg)
+{
+    if (fg) *fg = cur_fg;
+    if (bg) *bg = cur_bg;
+}
+
+void tty_putchar(char c)
+{
+    tty_putc_both(c);
+}
+
+void tty_write(const char* str, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+        tty_putc_both(str[i]);
+}
+
+void tty_print(const char* str)
+{
+    tty_puts_both(str);
+}
+
+void tty_print_hex(uint64_t value)
+{
+    const char* hex = "0123456789ABCDEF";
+    tty_puts_both("0x");
+    int started = 0;
+    for (int i = 60; i >= 0; i -= 4)
+    {
+        int digit = (int)((value >> i) & 0xF);
+        if (digit || started || i == 0)
+        {
+            tty_putc_both(hex[digit]);
+            started = 1;
+        }
+    }
+}
+
+void tty_newline(void)       { tty_putc_both('\n'); }
+void tty_scroll(void)        { /* no-op: UART terminal scrolls itself */ }
+void tty_begin_batch(void)   { /* no-op */ }
+void tty_end_batch(void)     { /* no-op */ }
+void tty_set_cursor(size_t x, size_t y) { (void)x; (void)y; }
+void tty_get_cursor(size_t* x, size_t* y) { if (x) *x = 0; if (y) *y = 0; }
+void tty_show_cursor(void)   { /* no-op */ }
+void tty_hide_cursor(void)   { /* no-op */ }
+
+/* Logging helpers — just print the tag prefix */
+void log_init(const char* msg)    { tty_print("[INIT]    "); tty_print(msg); tty_putchar('\n'); }
+void log_debug(const char* msg)   { tty_print("[DEBUG]   "); tty_print(msg); tty_putchar('\n'); }
+void log_set(const char* msg)     { tty_print("[SET]     "); tty_print(msg); tty_putchar('\n'); }
+void log_get(const char* msg)     { tty_print("[GET]     "); tty_print(msg); tty_putchar('\n'); }
+void log_success(const char* msg) { tty_print("[SUCCESS] "); tty_print(msg); tty_putchar('\n'); }
+void log_warn(const char* msg)    { tty_print("[WARN]    "); tty_print(msg); tty_putchar('\n'); }
+void log_error(const char* msg)   { tty_print("[ERROR]   "); tty_print(msg); tty_putchar('\n'); }
+
+/* Simple line reader over UART — no history or arrow key support yet */
+char* tty_readline(char* buffer, size_t max_len)
+{
+    size_t pos = 0;
+
+    while (1)
+    {
+        char c = keyboard_getchar();
+
+        if (c == '\r' || c == '\n')
+        {
+            buffer[pos] = '\0';
+            tty_putchar('\n');
+            return buffer;
+        }
+        else if (c == '\b' || c == 127)
+        {
+            if (pos > 0)
+            {
+                pos--;
+                tty_putchar('\b');
+                tty_putchar(' ');
+                tty_putchar('\b');
+            }
+        }
+        else if (c == 0x03)
+        {
+            /* Ctrl+C */
+            buffer[0] = '\0';
+            tty_print("^C\n");
+            return buffer;
+        }
+        else if (c >= 32 && c < 127)
+        {
+            if (pos < max_len - 1)
+            {
+                buffer[pos++] = c;
+                tty_putchar(c);
+            }
+        }
+    }
+}
+
+#else  /* !ARCH_ARM64 — original x86 VGA implementation */
+
 #include "fb.h"
 #include "../../lib/libc/string.h"
 #include "../input/keyboard.h"
@@ -950,3 +1104,5 @@ char* tty_readline(char* buffer, size_t max_len)
         // Ignore other characters
     }
 }
+
+#endif /* ARCH_ARM64 */

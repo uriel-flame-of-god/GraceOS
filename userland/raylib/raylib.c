@@ -139,6 +139,7 @@ static void update_input_frame(void)
     raylib_state.char_queue_count = 0;
     raylib_state.char_queue_read = 0;
 
+    /* Non-blocking input using read(0, ...) which returns 0 when no input available */
     char c;
     long result = read(0, &c, 1);
     while (result > 0)

@@ -21,7 +21,13 @@ static volatile int pipe_lock = 0;
 static inline void lock_pipes(void)
 {
     while (__sync_lock_test_and_set(&pipe_lock, 1))
+    {
+        #ifdef ARCH_ARM64
+        __asm__ volatile ("yield");
+        #else
         __asm__ volatile ("pause");
+        #endif
+    }
 }
 
 static inline void unlock_pipes(void)

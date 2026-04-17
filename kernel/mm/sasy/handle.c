@@ -26,7 +26,11 @@ static inline void lock_handles(void)
 {
     while (__sync_lock_test_and_set(&handle_lock, 1))
     {
+        #ifdef ARCH_ARM64
+        __asm__ volatile ("yield");
+        #else
         __asm__ volatile ("pause");
+        #endif
     }
 }
 

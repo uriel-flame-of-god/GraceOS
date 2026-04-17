@@ -6,7 +6,9 @@
 #include "proc.h"
 #include "sched.h"
 #include "../mm/kheap.h"
+#ifndef ARCH_ARM64
 #include "../mm/sasy/sasy.h"
+#endif
 #include "../log/klog.h"
 #include "../../lib/libc/string.h"
 
@@ -168,7 +170,9 @@ void proc_destroy(process_t* p)
     proc_reparent_children(p->pid);
     
     /* Release SASY segments */
+#ifndef ARCH_ARM64
     sasy_release_process(p->pid);
+#endif
     
     /* Close file descriptors */
     for (int i = 0; i < PROC_MAX_FDS; i++)

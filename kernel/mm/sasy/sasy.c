@@ -32,7 +32,11 @@ static inline void lock_sasy(void)
 {
     while (__sync_lock_test_and_set(&sasy_spinlock, 1))
     {
+        #ifdef ARCH_ARM64
+        __asm__ volatile ("yield");
+        #else
         __asm__ volatile ("pause");
+        #endif
     }
 }
 

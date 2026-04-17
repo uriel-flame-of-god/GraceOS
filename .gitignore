@@ -72,6 +72,8 @@ bsd
 
 disk.img
 
+kernel8.img
+
 packets.pcap
 *.pcap
 
